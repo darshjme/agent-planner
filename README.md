@@ -1,12 +1,23 @@
+<div align="center">
+<img src="assets/hero.svg" width="100%"/>
+</div>
+
 # agent-planner
 
-**Task decomposition and execution planning for AI agents.**
+**Task decomposition and execution planning for LLM agents. Zero external dependencies.**
 
-Complex agent tasks need structured breaking-down. Without it, agents attempt everything at once, lose track of progress, and can't recover from partial failures.
+[![PyPI](https://img.shields.io/pypi/v/agent-planner?color=blue)](https://pypi.org/project/agent-planner/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Zero deps](https://img.shields.io/badge/dependencies-zero-brightgreen)](pyproject.toml)
 
-```
-"build a REST API"  →  design schema → write models → implement endpoints → add tests
-```
+---
+
+## The Problem
+
+Production LLM agents fail silently. Without task decomposition and execution planning, you get undefined behaviour at scale — race conditions, lost state, cascading failures, and no way to debug what went wrong.
+
+`agent-planner` gives you a production-ready task decomposition and execution planning primitive with a clean API, tested edge cases, and zero configuration.
 
 ## Installation
 
@@ -14,167 +25,88 @@ Complex agent tasks need structured breaking-down. Without it, agents attempt ev
 pip install agent-planner
 ```
 
-## Quickstart: Multi-Step API Build Plan
+Or from source:
 
-```python
-from agent_planner import Planner, PlanExecutor
-
-# 1. Create a planner
-planner = Planner()
-
-# 2. Decompose a complex task into dependency-ordered steps
-plan = planner.decompose("Build REST API", [
-    {"id": "schema",    "description": "Design database schema"},
-    {"id": "models",    "description": "Write ORM models",         "depends_on": ["schema"]},
-    {"id": "endpoints", "description": "Implement API endpoints",   "depends_on": ["models"]},
-    {"id": "auth",      "description": "Add authentication",        "depends_on": ["models"]},
-    {"id": "tests",     "description": "Write test suite",          "depends_on": ["endpoints", "auth"]},
-    {"id": "docs",      "description": "Generate API documentation", "depends_on": ["endpoints"]},
-])
-
-print(f"Plan: {plan.name} ({len(plan)} steps)")
-# Plan: Build REST API (6 steps)
-
-# 3. Define handlers for each step (callables that receive the Step object)
-def run_schema(step):
-    print(f"  [schema] Designing tables...")
-    return {"tables": ["users", "posts", "tokens"]}
-
-def run_models(step):
-    print(f"  [models] Writing SQLAlchemy models...")
-    return {"files": ["models/user.py", "models/post.py"]}
-
-def run_endpoints(step):
-    print(f"  [endpoints] Implementing CRUD endpoints...")
-    return {"routes": ["/users", "/posts"]}
-
-def run_auth(step):
-    print(f"  [auth] Setting up JWT middleware...")
-    return {"middleware": "JWTBearer"}
-
-def run_tests(step):
-    print(f"  [tests] Writing pytest suite...")
-    return {"coverage": "92%"}
-
-def run_docs(step):
-    print(f"  [docs] Generating OpenAPI spec...")
-    return {"url": "/docs"}
-
-handlers = {
-    "schema":    run_schema,
-    "models":    run_models,
-    "endpoints": run_endpoints,
-    "auth":      run_auth,
-    "tests":     run_tests,
-    "docs":      run_docs,
-}
-
-# 4. Execute in dependency order (parallel-safe ordering)
-executor = PlanExecutor(plan, handlers)
-summary = executor.run()
-
-print(f"\nResult: {summary}")
-# Result: {'pending': 0, 'running': 0, 'done': 6, 'failed': 0, 'total': 6}
-
-print(f"Complete: {plan.is_complete}")
-# Complete: True
-
-# 5. Inspect step results
-for step in plan.steps:
-    print(f"  {step.id}: {step.status} → {step.result}")
+```bash
+git clone https://github.com/darshjme/agent-planner.git
+cd agent-planner
+pip install -e .
 ```
 
-## Linear Plans
-
-For simple sequential pipelines:
+## Quick Start
 
 ```python
-plan = planner.linear("Deploy Pipeline", [
-    "Run unit tests",
-    "Build Docker image",
-    "Push to registry",
-    "Deploy to staging",
-    "Run smoke tests",
-    "Promote to production",
-])
-# Each step auto-depends on the previous one.
+from agent_planner import *  # see API reference below
+
+# See examples/ directory for complete working examples
 ```
 
-## Core API
+## API Reference
 
-### `Step`
+The main classes and functions are defined in `agent_planner/__init__.py`.
 
-```python
-Step(
-    id="step-id",
-    description="What this step does",
-    depends_on=["other-step-id"],   # optional
-    metadata={"timeout": 30},        # optional
-)
+Key exports: `Step · Plan · Planner · PlanExecutor · dependency resolution`
 
-step.is_ready(completed: set[str]) -> bool  # True if deps satisfied
-step.to_dict() -> dict
-step.status   # "pending" | "running" | "done" | "failed"
-step.result   # set by executor on success
-step.error    # set by executor on failure
+All classes follow a consistent interface:
+- Instantiate with sensible defaults
+- Compose with other arsenal libraries
+- Zero external dependencies required
+
+See the source code and `tests/` directory for verified usage examples.
+
+## How It Works
+
+```mermaid
+flowchart LR
+    A[Agent Task] --> B[agent-planner]
+    B --> C{Decision}
+    C -->|success| D[✅ Result]
+    C -->|failure| E[⚠️ Handle]
+    E --> B
+
+    style B fill:#161b22,stroke:#3fb950,stroke-width:2,color:#3fb950
+    style D fill:#1a3320,stroke:#238636,color:#3fb950
+    style E fill:#3d1a1a,stroke:#f85149,color:#f85149
 ```
 
-### `Plan`
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant AgentPlanner as agent-planner
+    participant Output
 
-```python
-plan = Plan("name")
-plan.add_step(step)                          # fluent, validates duplicate IDs
-plan.next_steps(completed=None) -> list[Step]  # ready-to-run steps
-plan.is_complete   # bool: all steps done
-plan.is_failed     # bool: any step failed
-plan.summary()     # {"pending":0, "done":6, "total":6, ...}
-plan.to_dict()
+    Agent->>AgentPlanner: initialize()
+    AgentPlanner-->>Agent: ready
+
+    loop Agent Run
+        Agent->>AgentPlanner: process(input)
+        AgentPlanner-->>Agent: result
+    end
+
+    Agent->>Output: deliver(result)
 ```
 
-### `Planner`
+## Philosophy
 
-```python
-planner = Planner()
-planner.create("name") -> Plan                        # empty plan
-planner.decompose("task", [{id, description, ...}]) -> Plan
-planner.linear("name", ["desc1", "desc2"]) -> Plan    # sequential
-```
+Yudhishthira did not charge into battle without a plan. Neither should your agents.
 
-### `PlanExecutor`
+---
 
-```python
-executor = PlanExecutor(plan, handlers={step_id: callable})
-executor.run() -> dict          # executes all steps, returns summary
-executor.run_step(step_id) -> bool  # execute single step
-```
+## Part of the Arsenal
 
-**Handler signature:** `def my_handler(step: Step) -> Any` — return value stored in `step.result`.
+`agent-planner` is one of six production libraries for LLM agents:
 
-## Error Handling
+| Library | Purpose |
+|---------|---------|
+| [herald](https://github.com/darshjme/herald) | Semantic task routing |
+| [engram](https://github.com/darshjme/engram) | Agent memory |
+| [sentinel](https://github.com/darshjme/sentinel) | ReAct loop guards |
+| [verdict](https://github.com/darshjme/verdict) | Agent evaluation |
+| [agent-guardrails](https://github.com/darshjme/agent-guardrails) | Output validation |
+| [agent-observability](https://github.com/darshjme/agent-observability) | Tracing & metrics |
 
-```python
-def risky_handler(step):
-    raise ValueError("Database connection failed")
+→ [arsenal](https://github.com/darshjme/arsenal) — the complete stack
 
-executor = PlanExecutor(plan, {"db": risky_handler})
-executor.run()
+---
 
-db_step = plan.get_step("db")
-print(db_step.status)   # "failed"
-print(db_step.error)    # "ValueError: Database connection failed\n..."
-print(plan.is_failed)   # True
-```
-
-## Why agent-planner?
-
-| Without                          | With                              |
-|----------------------------------|-----------------------------------|
-| Attempt everything at once       | Structured dependency ordering    |
-| No progress tracking             | Step-level status: pending/running/done/failed |
-| Can't recover from failures      | Failed steps captured with errors  |
-| Unclear execution order          | Explicit `depends_on` graph        |
-| Hard to inspect state            | `summary()`, `to_dict()`, `is_complete` |
-
-## License
-
-MIT © Darshankumar Joshi
+*Built by [Darshankumar Joshi](https://github.com/darshjme), Gujarat, India.*
