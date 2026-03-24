@@ -4,20 +4,15 @@
 
 # agent-planner
 
-**Task decomposition and execution planning for LLM agents. Zero external dependencies.**
+**Task decomposition and execution planning for AI agents**
 
-[![PyPI](https://img.shields.io/pypi/v/agent-planner?color=blue)](https://pypi.org/project/agent-planner/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Zero deps](https://img.shields.io/badge/dependencies-zero-brightgreen)](pyproject.toml)
+[![PyPI version](https://img.shields.io/pypi/v/agent-planner?color=blue&style=flat-square)](https://pypi.org/project/agent-planner/) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://python.org) [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE) [![Tests](https://img.shields.io/badge/tests-passing-brightgreen?style=flat-square)](#)
 
 ---
 
 ## The Problem
 
-Production LLM agents fail silently. Without task decomposition and execution planning, you get undefined behaviour at scale — race conditions, lost state, cascading failures, and no way to debug what went wrong.
-
-`agent-planner` gives you a production-ready task decomposition and execution planning primitive with a clean API, tested edge cases, and zero configuration.
+Without a planner, complex goals become a single monolithic prompt that confuses the model, produces irrelevant sub-steps, and fails silently when goals shift mid-execution. Agents that cannot decompose cannot reason.
 
 ## Installation
 
@@ -25,88 +20,98 @@ Production LLM agents fail silently. Without task decomposition and execution pl
 pip install agent-planner
 ```
 
-Or from source:
-
-```bash
-git clone https://github.com/darshjme/agent-planner.git
-cd agent-planner
-pip install -e .
-```
-
 ## Quick Start
 
 ```python
-from agent_planner import *  # see API reference below
+from agent_planner import PlanExecutor, Plan, Planner
 
-# See examples/ directory for complete working examples
+# Initialise
+instance = PlanExecutor(name="my_agent")
+
+# Use
+result = instance.run()
+print(result)
 ```
 
 ## API Reference
 
-The main classes and functions are defined in `agent_planner/__init__.py`.
+### `PlanExecutor`
 
-Key exports: `Step · Plan · Planner · PlanExecutor · dependency resolution`
+```python
+class PlanExecutor:
+    """Executes a plan by invoking registered handlers for each step."""
+    def __init__(self, plan: Plan, handlers: dict[str, Callable] | None = None) -> None:
+    def run_step(self, step_id: str) -> bool:
+        """Execute a single step by ID. Marks it done or failed. Returns True on success."""
+    def run(self) -> dict:
+        """Execute all steps in dependency order. Returns final plan summary."""
+```
 
-All classes follow a consistent interface:
-- Instantiate with sensible defaults
-- Compose with other arsenal libraries
-- Zero external dependencies required
+### `Plan`
 
-See the source code and `tests/` directory for verified usage examples.
+```python
+class PlanExecutor:
+    """Executes a plan by invoking registered handlers for each step."""
+    def __init__(self, plan: Plan, handlers: dict[str, Callable] | None = None) -> None:
+    def run_step(self, step_id: str) -> bool:
+        """Execute a single step by ID. Marks it done or failed. Returns True on success."""
+    def run(self) -> dict:
+        """Execute all steps in dependency order. Returns final plan summary."""
+```
+
+### `Planner`
+
+```python
+class Planner:
+    """Creates and manages execution plans."""
+    def __init__(self) -> None:
+    def create(self, name: str) -> Plan:
+        """Create and register an empty plan."""
+    def decompose(self, task: str, steps: list[dict]) -> Plan:
+        """Build a plan from a list of step dicts with keys: id, description, depends_on?.
+    def linear(self, name: str, descriptions: list[str]) -> Plan:
+        """Create a sequential plan where each step depends on the previous.
+```
+
 
 ## How It Works
 
+### Flow
+
 ```mermaid
 flowchart LR
-    A[Agent Task] --> B[agent-planner]
-    B --> C{Decision}
-    C -->|success| D[✅ Result]
-    C -->|failure| E[⚠️ Handle]
-    E --> B
-
-    style B fill:#161b22,stroke:#3fb950,stroke-width:2,color:#3fb950
-    style D fill:#1a3320,stroke:#238636,color:#3fb950
-    style E fill:#3d1a1a,stroke:#f85149,color:#f85149
+    A[User Code] -->|create| B[PlanExecutor]
+    B -->|configure| C[Plan]
+    C -->|execute| D{Success?}
+    D -->|yes| E[Return Result]
+    D -->|no| F[Error Handler]
+    F --> G[Fallback / Retry]
+    G --> C
 ```
+
+### Sequence
 
 ```mermaid
 sequenceDiagram
-    participant Agent
-    participant AgentPlanner as agent-planner
-    participant Output
+    participant App
+    participant PlanExecutor
+    participant Plan
 
-    Agent->>AgentPlanner: initialize()
-    AgentPlanner-->>Agent: ready
-
-    loop Agent Run
-        Agent->>AgentPlanner: process(input)
-        AgentPlanner-->>Agent: result
-    end
-
-    Agent->>Output: deliver(result)
+    App->>+PlanExecutor: initialise()
+    PlanExecutor->>+Plan: configure()
+    Plan-->>-PlanExecutor: ready
+    App->>+PlanExecutor: run(context)
+    PlanExecutor->>+Plan: execute(context)
+    Plan-->>-PlanExecutor: result
+    PlanExecutor-->>-App: WorkflowResult
 ```
 
 ## Philosophy
 
-Yudhishthira did not charge into battle without a plan. Neither should your agents.
+> The Mahabharata was won not on the battlefield but in the *war council*; strategy precedes execution.
 
 ---
 
-## Part of the Arsenal
-
-`agent-planner` is one of six production libraries for LLM agents:
-
-| Library | Purpose |
-|---------|---------|
-| [herald](https://github.com/darshjme/herald) | Semantic task routing |
-| [engram](https://github.com/darshjme/engram) | Agent memory |
-| [sentinel](https://github.com/darshjme/sentinel) | ReAct loop guards |
-| [verdict](https://github.com/darshjme/verdict) | Agent evaluation |
-| [agent-guardrails](https://github.com/darshjme/agent-guardrails) | Output validation |
-| [agent-observability](https://github.com/darshjme/agent-observability) | Tracing & metrics |
-
-→ [arsenal](https://github.com/darshjme/arsenal) — the complete stack
-
----
+*Part of the [arsenal](https://github.com/darshjme/arsenal) — production stack for LLM agents.*
 
 *Built by [Darshankumar Joshi](https://github.com/darshjme), Gujarat, India.*
